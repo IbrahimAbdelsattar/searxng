@@ -31,6 +31,70 @@ Configure engines, networking, rate limiting, and instance settings for your dep
 
 This fork-specific `README.md` was rewritten with ChatGPT Codex assistance. Read `AI_POLICY.rst` before preparing any contribution to the upstream project.
 
+## UML diagrams
+
+### Main workflow
+
+This sequence summarizes the standard federated-search branch. Engine processors run concurrently, and timeouts are tracked in the shared result container.
+
+```mermaid
+sequenceDiagram
+    participant Web as Flask web application
+    participant Search as SearchWithPlugins
+    participant Processor as Engine processors
+    participant Engines as Search engines
+    participant Results as ResultContainer
+    Web->>Search: Search query and enabled plugins
+    Search->>Search: Run pre-search plugins and select requests
+    Note over Search,Processor: Standard branch excludes external-bang and answerer shortcuts
+    loop Selected usable engines in worker threads
+        Search->>Processor: search with query and timeout
+        Processor->>Engines: Execute engine-specific request
+        Engines-->>Processor: Engine response
+        Processor->>Results: Add parsed results
+    end
+    Search->>Search: Join workers within time budget
+    opt Worker exceeds timeout
+        Search->>Results: Record unresponsive engine
+    end
+    Search->>Search: Run post-search plugins
+    Search->>Results: Close result container
+    Search-->>Web: Aggregated results
+```
+
+### Search class relationships
+
+These source classes show plugin-aware search extending the base search workflow and using the shared result container.
+
+```mermaid
+classDiagram
+    direction TB
+    class Search {
+        +search()
+        +search_external_bang()
+        +search_answerers()
+        +search_standard()
+        +search_multiple_requests()
+    }
+    class SearchWithPlugins {
+        +search()
+    }
+    class ResultContainer {
+        +extend()
+        +add_unresponsive_engine()
+        +close()
+    }
+    class EngineProcessor {
+        <<abstract>>
+        +initialize()
+        +get_params()
+    }
+    Search <|-- SearchWithPlugins
+    Search --> ResultContainer : collects results
+    Search ..> EngineProcessor : dispatches workers
+    EngineProcessor ..> ResultContainer : adds results
+```
+
 ## Getting started
 
 ```bash
